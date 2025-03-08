@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"time"
+	"strings"
 
 	"github.com/jasonlovesdoggo/roastme/internal/ai"
 	"github.com/jasonlovesdoggo/roastme/internal/analysis"
@@ -13,127 +14,91 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	LowerLimit = 100
-	UpperLimit = 500
-)
-
 var (
 	cfgFile      string
 	deep         bool
-	continuous   bool
-	interval     int
-	maxRoasts    int
 	complexity   string
-	notifySystem bool
+	commandLimit int
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "roastme",
-	Short: "Roast your command line history using AI",
-	Long: `roastme is a CLI tool that analyzes your command history
-and generates humorous roasts based on your terminal habits.`,
+	Short: "Endless roasts of your command line history using AI",
+	Long: `GoRoastMe is a CLI tool that analyzes your command history
+and generates endless, hilarious roasts about your terminal habits.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Configure the application
 		cfg := config.GetConfig()
 
-		// If continuous mode is enabled
-		if continuous {
-			runContinuousMode(cfg)
-			return
+		// Run the interactive roasting mode
+		runInteractiveMode(cfg)
+	},
+}
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Configure GoRoastMe settings",
+	Run: func(cmd *cobra.Command, args []string) {
+		ui.RunConfigInterface()
+	},
+}
+
+func runInteractiveMode(cfg config.Config) {
+	fmt.Println("GoRoastMe - Terminal History Roaster")
+	fmt.Println("Press Enter for a new roast, Ctrl+C to exit")
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	count := 0
+
+	for {
+		// Generate initial roast or wait for Enter for subsequent roasts
+		if count > 0 {
+			fmt.Print("\nPress Enter for another roast... ")
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			// Exit if user types "exit" or "quit"
+			if strings.ToLower(input) == "exit" || strings.ToLower(input) == "quit" {
+				fmt.Println("Exiting GoRoastMe. Your terminal is safe... for now.")
+				return
+			}
 		}
 
 		// Create a spinner
 		spinner := ui.NewSpinner("Analyzing your command history...")
 		spinner.Start()
 
-		// Get command history
-		limit := LowerLimit
+		// Calculate actual command limit
+		actualLimit := commandLimit
 		if deep {
-			limit = UpperLimit
+			actualLimit *= 5 // Multiply by 5 in deep mode
 		}
-		commands, err := history.GetShellHistory(limit)
+
+		// Get command history - using actualLimit
+		commands, err := history.GetShellHistory(actualLimit)
 		if err != nil {
 			spinner.Stop()
 			fmt.Fprintf(os.Stderr, "Error getting shell history: %v\n", err)
-			os.Exit(1)
+			continue
 		}
 
 		// Analyze command patterns
 		patterns := analysis.AnalyzeHistory(commands)
 
 		// Generate roast with selected complexity
-		roast, err := ai.GenerateRoast(cfg, patterns, commands, getComplexityLevel())
+		level := getComplexityLevel()
+		roast, err := ai.GenerateRoast(cfg, patterns, commands, level)
 		if err != nil {
 			spinner.Stop()
 			fmt.Fprintf(os.Stderr, "Error generating roast: %v\n", err)
-			os.Exit(1)
+			continue
 		}
 
 		spinner.Stop()
 
-		// Display the roast
-		ui.DisplayRoast(roast)
-	},
-}
-
-// continuousCmd represents the continuous command
-var continuousCmd = &cobra.Command{
-	Use:   "continuous",
-	Short: "Run GoRoastMe in continuous mode",
-	Long: `Continuously monitors your command history and generates
-new roasts at specified intervals.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		cfg := config.GetConfig()
-		runContinuousMode(cfg)
-	},
-}
-
-func runContinuousMode(cfg config.Config) {
-	fmt.Println("Starting continuous roast mode...")
-	fmt.Printf("Generating a new roast every %d minutes\n", interval)
-	fmt.Println("Press Ctrl+C to exit")
-
-	count := 0
-	for {
-		if maxRoasts > 0 && count >= maxRoasts {
-			fmt.Println("Reached maximum number of roasts. Exiting.")
-			return
-		}
-
-		// Clear screen between roasts
-		if count > 0 {
-			time.Sleep(time.Duration(interval) * time.Minute)
-		}
-
-		// Get updated command history
-		limit := LowerLimit
-		if deep {
-			limit = UpperLimit
-		}
-		commands, err := history.GetShellHistory(limit)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting shell history: %v\n", err)
-			continue
-		}
-
-		// Analyze command patterns
-		patterns := analysis.AnalyzeHistory(commands)
-
-		// Generate roast with selected complexity
-		roast, err := ai.GenerateRoast(cfg, patterns, commands, getComplexityLevel())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating roast: %v\n", err)
-			continue
-		}
-
-		// Send system notification if enabled
-		if notifySystem {
-			ui.SendNotification("GoRoastMe", "New roast generated!")
-		}
-
-		// Display the roast with timestamp
-		ui.DisplayContinuousRoast(roast, count+1)
+		// Display the roast with current count
+		ui.DisplayInteractiveRoast(roast, count+1, len(commands))
 
 		count++
 	}
@@ -154,14 +119,6 @@ func getComplexityLevel() ai.ComplexityLevel {
 	}
 }
 
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Configure goroastme settings",
-	Run: func(cmd *cobra.Command, args []string) {
-		ui.RunConfigInterface()
-	},
-}
-
 func Execute() error {
 	return rootCmd.Execute()
 }
@@ -170,22 +127,11 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.goroastme.yaml)")
-	rootCmd.Flags().BoolVar(&deep, "deep", false, "Perform a deeper, more personal roast")
-	rootCmd.Flags().BoolVar(&continuous, "continuous", false, "Run in continuous mode, generating roasts at intervals")
-	rootCmd.Flags().IntVar(&interval, "interval", 5, "Interval in minutes between roasts in continuous mode")
-	rootCmd.Flags().IntVar(&maxRoasts, "max", 0, "Maximum number of roasts to generate (0 = unlimited)")
+	rootCmd.Flags().BoolVar(&deep, "deep", false, "Analyze 5x more commands than the default limit")
 	rootCmd.Flags().StringVar(&complexity, "complexity", "normal", "Roast complexity: simple, normal, complex, or brutal")
-	rootCmd.Flags().BoolVar(&notifySystem, "notify", false, "Send system notifications when new roasts are generated")
-
-	// Add the continuous command separately
-	continuousCmd.Flags().IntVar(&interval, "interval", 5, "Interval in minutes between roasts")
-	continuousCmd.Flags().IntVar(&maxRoasts, "max", 0, "Maximum number of roasts to generate (0 = unlimited)")
-	continuousCmd.Flags().StringVar(&complexity, "complexity", "normal", "Roast complexity: simple, normal, complex, or brutal")
-	continuousCmd.Flags().BoolVar(&notifySystem, "notify", false, "Send system notifications when new roasts are generated")
-	continuousCmd.Flags().BoolVar(&deep, "deep", false, "Perform a deeper, more personal roast")
+	rootCmd.Flags().IntVar(&commandLimit, "limit", 500, "Number of commands to analyze (multiplied by 5 in deep mode)")
 
 	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(continuousCmd)
 }
 
 func initConfig() {

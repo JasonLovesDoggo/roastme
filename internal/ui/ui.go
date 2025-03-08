@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"github.com/gen2brain/beeep"
 	"os"
 	"strings"
 	"time"
@@ -590,34 +589,24 @@ func (m *configModel) saveConfig() {
 	}
 }
 
-// DisplayContinuousRoast displays the roast in a pretty format for continuous mode
-func DisplayContinuousRoast(roast string, count int) {
+// DisplayInteractiveRoast displays the roast in the interactive mode
+func DisplayInteractiveRoast(roast string, count int, commandCount int) {
 	// Clear screen
 	fmt.Print("\033[H\033[2J")
 
-	// Timestamp
-	now := time.Now()
-	timestamp := now.Format("2006-01-02 15:04:05")
+	// Header with roast count and command count
+	headerText := fmt.Sprintf("ROAST #%d", count)
+	header := strings.Repeat("─", (70-len(headerText))/2) + headerText + strings.Repeat("─", (70-len(headerText))/2)
 
-	// Title with count
-	fmt.Println(titleStyle.Render(fmt.Sprintf("COMMAND HISTORY ROAST #%d", count)))
-	fmt.Println(infoStyle.Render(fmt.Sprintf("Generated at: %s", timestamp)))
+	fmt.Println(titleStyle.Render(header))
+	fmt.Println(infoStyle.Render(fmt.Sprintf("Analyzed %d commands from your history", commandCount)))
 	fmt.Println()
 
-	// Content
+	// Roast content in a fancy box
 	fmt.Println(roastBoxStyle.Render(strings.TrimSpace(roast)))
 	fmt.Println()
 
 	// Footer
-	fmt.Println(infoStyle.Render("Press Ctrl+C to exit continuous mode"))
-}
-
-// SendNotification sends a system notification
-func SendNotification(title, message string) {
-
-	err := beeep.Notify(title, message, "")
-	if err != nil {
-		return
-	}
-	fmt.Fprintf(os.Stderr, "\007") // Terminal bell
+	fmt.Println(infoStyle.Render("Press Enter for another roast"))
+	fmt.Println(infoStyle.Render("Type 'exit' or press Ctrl+C to quit"))
 }
