@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"time"
-
 	"github.com/jasonlovesdoggo/roastme/internal/analysis"
 	"github.com/jasonlovesdoggo/roastme/internal/config"
 	"github.com/tmc/langchaingo/llms"
@@ -14,54 +11,61 @@ import (
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
+// ComplexityLevel defines how elaborate the roast should be
+type ComplexityLevel int
+
+const (
+	SimpleRoast ComplexityLevel = iota
+	NormalRoast
+	ComplexRoast
+	BrutalRoast
+)
+
 // GenerateRoast generates a roast based on the command patterns
-func GenerateRoast(cfg config.Config, patterns analysis.CommandPattern, commands []string) (string, error) {
+func GenerateRoast(cfg config.Config, patterns analysis.CommandPattern, commands []string, complexity ComplexityLevel) (string, error) {
 	// Use local roasts if no AI provider is configured or provider is set to "local"
 	if cfg.AI.Provider == "" || cfg.AI.Provider == "local" {
-		return generateLocalRoast(patterns), nil
+		return generateLocalRoast(patterns, complexity), nil
 	}
+
 	// Try to generate a roast using the configured AI provider
-	roast, err := generateAIRoast(cfg, patterns, commands)
+	roast, err := generateAIRoast(cfg, patterns, commands, complexity)
 	if err != nil {
 		// Fall back to local roasts if AI fails
-		return generateLocalRoast(patterns), nil
+		return generateLocalRoast(patterns, complexity), nil
 	}
 
 	return roast, nil
 }
 
 // generateAIRoast generates a roast using the configured AI provider
-func generateAIRoast(cfg config.Config, patterns analysis.CommandPattern, commands []string) (string, error) {
+func generateAIRoast(cfg config.Config, patterns analysis.CommandPattern, commands []string, complexity ComplexityLevel) (string, error) {
 	// Prepare context
 	ctx := context.Background()
 
-	// Get the last 10 commands for the prompt
+	// Get appropriate number of commands based on complexity
 	recentCmds := commands
-	if len(recentCmds) > 10 {
-		recentCmds = recentCmds[len(recentCmds)-10:]
-	}
+	//cmdLimit := 10
+	//
+	//switch complexity {
+	//case SimpleRoast:
+	//	cmdLimit = 5
+	//case NormalRoast:
+	//	cmdLimit = 10
+	//case ComplexRoast:
+	//	cmdLimit = 20
+	//case BrutalRoast:
+	//	cmdLimit = 30
+	//}
+	//
+	//if len(recentCmds) > cmdLimit {
+	//	recentCmds = recentCmds[len(recentCmds)-cmdLimit:]
+	//}
 
-	// Create prompt based on command patterns
-	prompt := fmt.Sprintf(`
-Roast this person based on their command line history. Be funny but not mean.
+	// Create prompt based on command patterns and complexity level
+	prompt := createPromptForComplexity(recentCmds, patterns, complexity)
 
-Recent commands:
-%s
-
-Patterns found:
-- Repeated commands: %v
-- Failed commands: %v
-- Complex commands: %v
-- Indecisive: %v
-- Time wasters: %v
-- Skill level: %s
-
-Generate a short, funny roast (1-3 sentences) about their terminal habits.
-`, formatCommands(recentCmds), patterns.RepeatedCommands,
-		patterns.FailedCommands, patterns.ComplexCommands,
-		patterns.Indecisive, patterns.TimeWasters, patterns.SkillLevel)
-
-	var llm llms.LLM
+	var llm llms.Model
 	var err error
 
 	// Initialize the appropriate LLM based on provider
@@ -82,10 +86,28 @@ Generate a short, funny roast (1-3 sentences) about their terminal habits.
 		return "", err
 	}
 
-	// Generate the roast
+	// Generate the roast with appropriate parameters based on complexity
+	maxTokens := 150
+	temperature := 0.7
+
+	switch complexity {
+	case SimpleRoast:
+		maxTokens = 100
+		temperature = 0.5
+	case NormalRoast:
+		maxTokens = 150
+		temperature = 0.7
+	case ComplexRoast:
+		maxTokens = 300
+		temperature = 0.8
+	case BrutalRoast:
+		maxTokens = 500
+		temperature = 0.9
+	}
+
 	completion, err := llm.Call(ctx, prompt,
-		llms.WithTemperature(0.7),
-		llms.WithMaxTokens(150),
+		llms.WithTemperature(temperature),
+		llms.WithMaxTokens(maxTokens),
 	)
 
 	if err != nil {
@@ -95,8 +117,57 @@ Generate a short, funny roast (1-3 sentences) about their terminal habits.
 	return completion, nil
 }
 
+// createPromptForComplexity creates a prompt based on the desired complexity level
+func createPromptForComplexity(commands []string, patterns analysis.CommandPattern, complexity ComplexityLevel) string {
+	systemPrompt := "You are an Arch Linux user who lives in your terminal. Your only purpose is to roast people about their command-line habits.\nBe clever, humorous, and unapologetically savage. Analyze shell history with deep technical insight, and deliver biting, hilarious roasts.\nThink of yourself as the Gordon Ramsay of the terminal—brutal but constructive. Your tone is sharp, witty, and tech-savvy, always packed\nwith programming humor."
+
+	basePrompt := fmt.Sprintf(`
+Recent commands:
+%s
+
+Patterns found:
+- Repeated commands: %v
+- Failed commands: %v
+- Complex commands: %v
+- Indecisive: %v
+- Time wasters: %v
+- Skill level: %s
+`, formatCommands(commands), patterns.RepeatedCommands,
+		patterns.FailedCommands, patterns.ComplexCommands,
+		patterns.Indecisive, patterns.TimeWasters, patterns.SkillLevel)
+	switch complexity {
+	case SimpleRoast:
+		return systemPrompt + "Roast this person based on their command line history. Be concise and mildly amusing." +
+			basePrompt + "\nGenerate a short, simple roast (1-2 sentences) about their terminal habits."
+
+	case NormalRoast:
+		return systemPrompt + "Roast this person based on their command line history. Be funny but not mean." +
+			basePrompt + "\nGenerate a moderate-length roast (2-3 sentences) about their terminal habits."
+
+	case ComplexRoast:
+		return systemPrompt + "Roast this person based on their command line history. Be clever, " +
+			"insightful and humorous." +
+			basePrompt +
+			"\nGenerate a detailed roast (3-4 paragraphs) about their terminal habits. Include specific observations about their " +
+			"command patterns, technical skill level, and potential personality traits that might be revealed by their commands. " +
+			"Be creative and witty, using tech humor and programming references."
+
+	case BrutalRoast:
+		return systemPrompt + "Roast this person based on their command line history. Be extremely thorough, " +
+			"devastatingly funny, " +
+			"and borderline ruthless." +
+			basePrompt +
+			"\nWrite a comprehensive, brutal roast (4+ paragraphs) that thoroughly analyzes their terminal habits. " +
+			"Include specific references to their commands, create an entire psychological profile based on their terminal behavior, " +
+			"make wild assumptions about their coding abilities, and don't hold back on the technical humor. " +
+			"Imagine this is a Comedy Central Roast but for developers. Be creative, savage but still ultimately good-natured."
+	}
+
+	return systemPrompt + "Roast this person based on their command line history." + basePrompt
+}
+
 // initOpenAI initializes the OpenAI client
-func initOpenAI(cfg config.Config) (llms.LLM, error) {
+func initOpenAI(cfg config.Config) (llms.Model, error) {
 	if cfg.AI.OpenAI.APIKey == "" {
 		return nil, errors.New("OpenAI API key not configured")
 	}
@@ -117,16 +188,14 @@ func initOpenAI(cfg config.Config) (llms.LLM, error) {
 }
 
 // initAnthropic initializes the Anthropic client
-func initAnthropic(cfg config.Config) (llms.LLM, error) {
-	// Note: As of this implementation, langchaingo might not have direct Anthropic support
-	// This is a placeholder for when it's available or you could implement a custom connector
-	return nil, errors.New("Anthropic support not implemented yet")
+func initAnthropic(cfg config.Config) (llms.Model, error) {
+	return nil, errors.New("anthropic support not implemented yet")
 }
 
 // initGemini initializes the Google Gemini client
-func initGemini(cfg config.Config) (llms.LLM, error) {
+func initGemini(cfg config.Config) (llms.Model, error) {
 	if cfg.AI.Gemini.APIKey == "" {
-		return nil, errors.New("Google Gemini API key not configured")
+		return nil, errors.New("google Gemini API key not configured")
 	}
 
 	ctx := context.Background()
@@ -134,67 +203,12 @@ func initGemini(cfg config.Config) (llms.LLM, error) {
 		googleai.WithAPIKey(cfg.AI.Gemini.APIKey),
 	}
 
-	// Note: Gemini's API is different, we'll set the model using the option directly
-	if cfg.AI.Gemini.Model != "" {
-		// The model needs to be set separately during Call()
-	}
-
-	// googleai.New() requires a context as first parameter
 	return googleai.New(ctx, options...)
 }
 
 // initCustom initializes a custom LLM client
-func initCustom(cfg config.Config) (llms.LLM, error) {
-	// This would implement a custom LLM client
-	return nil, errors.New("Custom LLM provider support not implemented yet")
-}
-
-// generateLocalRoast generates a roast without using an external AI service
-func generateLocalRoast(patterns analysis.CommandPattern) string {
-	roasts := []string{}
-
-	if len(patterns.RepeatedCommands) > 0 {
-		cmd := patterns.RepeatedCommands[0].Command
-		count := patterns.RepeatedCommands[0].Count
-		roasts = append(roasts, fmt.Sprintf("I see you've used '%s' %d times. Having memory issues or just really, really in love with that command?", cmd, count))
-	}
-
-	if len(patterns.FailedCommands) > 0 {
-		roasts = append(roasts, fmt.Sprintf("Nice typos! Maybe typing lessons should be in your future before attempting '%s'.", patterns.FailedCommands[0]))
-	}
-
-	if len(patterns.ComplexCommands) > 0 {
-		roasts = append(roasts, "Wow, those complex commands! Trying to impress an invisible audience or just afraid of using separate lines?")
-	}
-
-	if patterns.Indecisive {
-		roasts = append(roasts, "All those cd's and ls's... are you exploring your filesystem or just completely lost in there?")
-	}
-
-	if len(patterns.TimeWasters) > 0 {
-		waster := patterns.TimeWasters[0]
-		roasts = append(roasts, fmt.Sprintf("I see you're visiting %s. Working hard or hardly working, eh?", waster))
-	}
-
-	if len(roasts) == 0 {
-		skill := patterns.SkillLevel
-		if skill == "beginner" {
-			roasts = append(roasts, "Your command history screams 'I just discovered what a terminal is'. How adorable.")
-		} else if skill == "intermediate" {
-			roasts = append(roasts, "Your command history is like a mediocre pizza - it gets the job done but nobody's impressed.")
-		} else {
-			roasts = append(roasts, "Fancy commands! Overcompensating for something or just showing off to nobody?")
-		}
-	}
-
-	// Make sure we have at least one roast
-	if len(roasts) == 0 {
-		roasts = append(roasts, "I can't even roast your command history - it's that boring. Try doing something interesting first!")
-	}
-
-	// Return a random roast
-	rand.Seed(time.Now().UnixNano())
-	return roasts[rand.Intn(len(roasts))]
+func initCustom(cfg config.Config) (llms.Model, error) {
+	return nil, errors.New("custom LLM provider support not implemented yet")
 }
 
 // formatCommands formats a slice of commands for inclusion in the prompt
