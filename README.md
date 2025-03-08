@@ -13,7 +13,8 @@
 
 ## 📖 Overview
 
-**RoastMe** is a fun CLI tool that analyzes your command history and generates humorous "roasts" based on your terminal habits. 
+**GoRoastMe** is a fun CLI tool that analyzes your command history and generates humorous "roasts" based on your 
+terminal habits. 
 
 Whether you're making the same typos, using excessively complex commands, or spending too much time on social media sites through the terminal, RoastMe will call you out with style.
 
