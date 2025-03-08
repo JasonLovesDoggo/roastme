@@ -37,15 +37,6 @@ Whether you're making the same typos, using excessively complex commands, or spe
 go install github.com/jasonlovesdoggo/roastme@latest
 ```
 
-### From source
-
-```bash
-git clone https://github.com/jasonlovesdoggo/roastme.git
-cd roastme
-go build -o roastme
-sudo mv roastme /usr/local/bin/
-```
-
 ### Pre-built binaries
 
 Download the [latest release](https://github.com/jasonlovesdoggo/roastme/releases/latest) for your platform.
