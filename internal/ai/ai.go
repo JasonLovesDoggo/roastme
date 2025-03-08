@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tmc/langchaingo/llms"
 	"math/rand"
 	"time"
 
 	"github.com/jasonlovesdoggo/roastme/internal/analysis"
 	"github.com/jasonlovesdoggo/roastme/internal/config"
+	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/googleai"
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
@@ -19,7 +20,6 @@ func GenerateRoast(cfg config.Config, patterns analysis.CommandPattern, commands
 	if cfg.AI.Provider == "" || cfg.AI.Provider == "local" {
 		return generateLocalRoast(patterns), nil
 	}
-
 	// Try to generate a roast using the configured AI provider
 	roast, err := generateAIRoast(cfg, patterns, commands)
 	if err != nil {
@@ -70,6 +70,8 @@ Generate a short, funny roast (1-3 sentences) about their terminal habits.
 		llm, err = initOpenAI(cfg)
 	case "anthropic":
 		llm, err = initAnthropic(cfg)
+	case "gemini":
+		llm, err = initGemini(cfg)
 	case "custom":
 		llm, err = initCustom(cfg)
 	default:
@@ -119,6 +121,26 @@ func initAnthropic(cfg config.Config) (llms.LLM, error) {
 	// Note: As of this implementation, langchaingo might not have direct Anthropic support
 	// This is a placeholder for when it's available or you could implement a custom connector
 	return nil, errors.New("Anthropic support not implemented yet")
+}
+
+// initGemini initializes the Google Gemini client
+func initGemini(cfg config.Config) (llms.LLM, error) {
+	if cfg.AI.Gemini.APIKey == "" {
+		return nil, errors.New("Google Gemini API key not configured")
+	}
+
+	ctx := context.Background()
+	options := []googleai.Option{
+		googleai.WithAPIKey(cfg.AI.Gemini.APIKey),
+	}
+
+	// Note: Gemini's API is different, we'll set the model using the option directly
+	if cfg.AI.Gemini.Model != "" {
+		// The model needs to be set separately during Call()
+	}
+
+	// googleai.New() requires a context as first parameter
+	return googleai.New(ctx, options...)
 }
 
 // initCustom initializes a custom LLM client

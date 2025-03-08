@@ -14,6 +14,7 @@ type Config struct {
 		Provider  string           `mapstructure:"provider"`
 		OpenAI    AIProviderConfig `mapstructure:"openai"`
 		Anthropic AIProviderConfig `mapstructure:"anthropic"`
+		Gemini    AIProviderConfig `mapstructure:"gemini"`
 		Custom    AIProviderConfig `mapstructure:"custom"`
 	} `mapstructure:"ai"`
 	UI struct {
@@ -31,6 +32,7 @@ type AIProviderConfig struct {
 var config Config
 
 func Init(cfgFile string) {
+	viper.SetConfigType("toml")
 	if cfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(cfgFile)
@@ -49,10 +51,12 @@ func Init(cfgFile string) {
 
 	viper.AutomaticEnv() // read in environment variables that match
 
-	// Set defaults
-	viper.SetDefault("ai.provider", "local")
+	// Set defaults - using Gemini as default provider
+	viper.SetDefault("ai.provider", "gemini")
 	viper.SetDefault("ai.openai.model", "gpt-3.5-turbo")
 	viper.SetDefault("ai.anthropic.model", "claude-2")
+	viper.SetDefault("ai.gemini.model", "gemini-pro")
+	viper.SetDefault("ai.gemini.base_url", "https://generativelanguage.googleapis.com")
 	viper.SetDefault("ui.colorTheme", "dark")
 	viper.SetDefault("ui.style", "rounded")
 
@@ -63,26 +67,35 @@ func Init(cfgFile string) {
 		// Create default config file if it doesn't exist
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			home, _ := homedir.Dir()
-			configPath := filepath.Join(home, ".roastme.yaml")
+			configPath := filepath.Join(home, ".roastme.toml")
 
-			// Create the default configuration
-			defaultConfig := `ai:
-  provider: local
-  openai:
-    api_key: ""
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-3.5-turbo"
-  anthropic:
-    api_key: ""
-    base_url: "https://api.anthropic.com"
-    model: "claude-2"
-  custom:
-    api_key: ""
-    base_url: ""
-    model: ""
-ui:
-  colorTheme: dark
-  style: rounded
+			// Create the default configuration with Gemini as default
+			defaultConfig := `[ai]
+provider = "gemini"
+
+[ai.openai]
+api_key = ""
+base_url = "https://api.openai.com/v1"
+model = "gpt-3.5-turbo"
+
+[ai.anthropic]
+api_key = ""
+base_url = "https://api.anthropic.com"
+model = "claude-2"
+
+[ai.gemini]
+api_key = ""
+base_url = "https://generativelanguage.googleapis.com"
+model = "gemini-pro"
+
+[ai.custom]
+api_key = ""
+base_url = ""
+model = ""
+
+[ui]
+colorTheme = "dark"
+style = "rounded"
 `
 			// Write the default config to file
 			if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
@@ -122,6 +135,9 @@ func UpdateConfig(newConfig Config) error {
 	viper.Set("ai.anthropic.api_key", config.AI.Anthropic.APIKey)
 	viper.Set("ai.anthropic.base_url", config.AI.Anthropic.BaseURL)
 	viper.Set("ai.anthropic.model", config.AI.Anthropic.Model)
+	viper.Set("ai.gemini.api_key", config.AI.Gemini.APIKey)
+	viper.Set("ai.gemini.base_url", config.AI.Gemini.BaseURL)
+	viper.Set("ai.gemini.model", config.AI.Gemini.Model)
 	viper.Set("ai.custom.api_key", config.AI.Custom.APIKey)
 	viper.Set("ai.custom.base_url", config.AI.Custom.BaseURL)
 	viper.Set("ai.custom.model", config.AI.Custom.Model)

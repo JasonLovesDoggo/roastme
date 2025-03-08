@@ -10,7 +10,6 @@ import (
 	"github.com/jasonlovesdoggo/roastme/internal/history"
 	"github.com/jasonlovesdoggo/roastme/internal/ui"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -34,7 +33,7 @@ and generates humorous roasts based on your terminal habits.`,
 		// Get command history
 		limit := 30
 		if deep {
-			limit = 100
+			limit = -1
 		}
 		commands, err := history.GetShellHistory(limit)
 		if err != nil {
